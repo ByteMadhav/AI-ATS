@@ -1,8 +1,8 @@
 from langchain_community.document_loaders import PDFPlumberLoader
 
-def extract_text_from_pdf(file_path):
+def read_resume(file_path):
 
-    file_path = r"C:\Users\madha\OneDrive\Desktop\Madhav\MEC\MADHAV ANNUP-RESUME.pdf"  
+    file_path = r"C:\Users\madha\OneDrive\Desktop\CV Sangeetha Annup.pdf" 
     loader=PDFPlumberLoader(file_path)
     documents=loader.load()
 

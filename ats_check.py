@@ -1,15 +1,19 @@
 import os
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openrouter import OpenRouter
+from langchain_openrouter import ChatOpenRouter
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
+import resume_reader
 
 load_dotenv()
+file_path = r"C:\Users\madha\OneDrive\Desktop\CV Sangeetha Annup.pdf"
+
+resume_content = resume_reader.read_resume(file_path)
 
 os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
 os.environ["DEBUG"] = os.getenv("DEBUG")
 
-model=OpenRouter(
+model=ChatOpenRouter(
     model="nemotron-3-ultra-550b-a55b:free"
 )
 
@@ -20,6 +24,8 @@ prompt_template = ChatPromptTemplate.from_messages([
 
 output_parser = StrOutputParser()
 
-chain= model | prompt_template | output_parser
+chain= prompt_template | model | output_parser
 
-response = chain.invoke({"input": "Please check the resume and provide a score out of 100."})
+response = chain.invoke([{"role": "user", "content": resume_content}])
+
+print("Resume Score:", response)
