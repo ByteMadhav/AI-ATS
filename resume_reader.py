@@ -2,7 +2,7 @@ from langchain_community.document_loaders import PDFPlumberLoader
 
 def read_resume(file_path):
 
-    file_path = r"C:\Users\madha\OneDrive\Desktop\CV Sangeetha Annup.pdf" 
+    file_path = r"C:\Users\madha\OneDrive\Desktop\Madhav\MEC\MADHAV ANNUP-RESUME.pdf"
     loader=PDFPlumberLoader(file_path)
     documents=loader.load()
 
