@@ -14,7 +14,10 @@ os.environ["DEBUG"] = os.getenv("DEBUG", "")
 model = AsyncOpenAI(
     api_key=os.getenv("GEMINI_API_KEY"),
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    seed=42
+    seed=42,
+    top_p=1.0,
+    temperature=0.0,
+    top_k=1
 )
 
 """
