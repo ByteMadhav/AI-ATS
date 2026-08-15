@@ -56,6 +56,221 @@ function Logomark() {
   );
 }
 
+// ---------------------------------------------------------------------
+// Minimal markdown renderer for the examiner's notes: the ATS model
+// returns headings, bold text, tables and lists as markdown, and we
+// render that into styled blocks instead of dumping raw ### / | / **
+// syntax on the page.
+// ---------------------------------------------------------------------
+
+function renderInline(text, keyPrefix) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter((p) => p !== "");
+  return parts.map((part, idx) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      return (
+        <strong key={`${keyPrefix}-${idx}`} className="text-white font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (/^`[^`]+`$/.test(part)) {
+      return (
+        <code
+          key={`${keyPrefix}-${idx}`}
+          className="text-[#E8834D] bg-white/[0.06] px-1 py-0.5 rounded text-[12px]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <React.Fragment key={`${keyPrefix}-${idx}`}>{part}</React.Fragment>;
+  });
+}
+
+function splitTableRow(line) {
+  let cells = line.trim().split("|");
+  if (cells[0].trim() === "") cells = cells.slice(1);
+  if (cells.length && cells[cells.length - 1].trim() === "") cells = cells.slice(0, -1);
+  return cells.map((c) => c.trim());
+}
+
+function parseMarkdownBlocks(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    if (line.trim().startsWith("|")) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      const header = splitTableRow(tableLines[0]);
+      const isSeparator =
+        tableLines[1] && /^[\s|:-]+$/.test(tableLines[1]) && tableLines[1].includes("-");
+      const bodyLines = tableLines.slice(isSeparator ? 2 : 1);
+      const rows = bodyLines.map(splitTableRow);
+      blocks.push({ type: "table", header, rows });
+      continue;
+    }
+
+    if (/^(-{3,}|\*{3,})\s*$/.test(line.trim())) {
+      blocks.push({ type: "hr" });
+      i++;
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2] });
+      i++;
+      continue;
+    }
+
+    if (line.trim().startsWith(">")) {
+      const quoteLines = [];
+      while (i < lines.length && lines[i].trim().startsWith(">")) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
+        i++;
+      }
+      blocks.push({ type: "quote", text: quoteLines.join(" ") });
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+      const items = [];
+      while (
+        i < lines.length &&
+        (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+\.\s+/.test(lines[i]))
+      ) {
+        items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+        i++;
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    const paraLines = [];
+    while (
+      i < lines.length &&
+      lines[i].trim() !== "" &&
+      !lines[i].trim().startsWith("|") &&
+      !/^(#{1,6})\s+/.test(lines[i]) &&
+      !/^(-{3,}|\*{3,})\s*$/.test(lines[i].trim()) &&
+      !lines[i].trim().startsWith(">") &&
+      !/^\s*[-*]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i])
+    ) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    blocks.push({ type: "paragraph", text: paraLines.join(" ") });
+  }
+
+  return blocks;
+}
+
+const HEADING_STYLES = {
+  1: "text-[15px] font-semibold text-white mt-5 mb-2 pb-1 border-b border-white/10",
+  2: "text-[15px] font-semibold text-white mt-5 mb-2 pb-1 border-b border-white/10",
+  3: "text-[13px] font-semibold text-[#E8834D] uppercase tracking-wide mt-5 mb-2",
+  4: "text-xs font-semibold text-[#8B8478] uppercase tracking-wide mt-4 mb-1",
+  5: "text-xs font-semibold text-[#8B8478] uppercase tracking-wide mt-4 mb-1",
+  6: "text-xs font-semibold text-[#8B8478] uppercase tracking-wide mt-4 mb-1",
+};
+
+function MarkdownReport({ text }) {
+  const blocks = parseMarkdownBlocks(text || "");
+
+  return (
+    <div>
+      {blocks.map((block, i) => {
+        if (block.type === "heading") {
+          return (
+            <p key={i} className={HEADING_STYLES[block.level] || HEADING_STYLES[3]}>
+              {renderInline(block.text, `h${i}`)}
+            </p>
+          );
+        }
+        if (block.type === "hr") {
+          return <div key={i} className="my-4 border-t border-white/10" />;
+        }
+        if (block.type === "quote") {
+          return (
+            <blockquote
+              key={i}
+              className="border-l-2 border-[#E8834D] pl-3 py-1 my-3 text-sm text-[#D8D2C4] italic bg-white/[0.02] rounded-r"
+            >
+              {renderInline(block.text, `q${i}`)}
+            </blockquote>
+          );
+        }
+        if (block.type === "list") {
+          return (
+            <ul key={i} className="space-y-1.5 my-2">
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-2 text-sm text-[#D8D2C4] leading-relaxed">
+                  <span className="text-[#E8834D] shrink-0">•</span>
+                  <span>{renderInline(item, `li${i}-${j}`)}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (block.type === "table") {
+          return (
+            <div key={i} className="my-3 overflow-x-auto rounded-lg border border-white/[0.08]">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-white/[0.04] border-b border-white/[0.08]">
+                    {block.header.map((cell, ci) => (
+                      <th
+                        key={ci}
+                        className="text-[10px] tracking-wide text-[#D97B4F] uppercase font-semibold py-2 px-3 whitespace-nowrap"
+                      >
+                        {renderInline(cell, `th${i}-${ci}`)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, ri) => (
+                    <tr key={ri} className="border-b border-white/[0.05] last:border-b-0">
+                      {row.map((cell, ci) => (
+                        <td
+                          key={ci}
+                          className={`py-2 px-3 text-[13px] align-top ${
+                            ci === 0 ? "text-white font-medium" : "text-[#D8D2C4]"
+                          }`}
+                        >
+                          {renderInline(cell, `td${i}-${ri}-${ci}`)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return (
+          <p key={i} className="text-sm text-[#D8D2C4] leading-relaxed my-2">
+            {renderInline(block.text, `p${i}`)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ResumeDashboard() {
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -215,7 +430,11 @@ export default function ResumeDashboard() {
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
           {/* Left: review desk */}
-          <div className="bg-[#121009]/70 border border-[#D97B4F]/25 rounded-2xl p-6">
+          <div
+            className={`bg-[#121009]/70 border border-[#D97B4F]/25 rounded-2xl p-6 ${
+              status === "done" ? "lg:col-span-2" : ""
+            }`}
+          >
             <p className="text-[10px] tracking-[0.18em] text-[#D97B4F] font-medium mb-4">
               REVIEW DESK
             </p>
@@ -345,9 +564,7 @@ export default function ResumeDashboard() {
                   <p className="text-[10px] tracking-[0.18em] text-[#D97B4F] font-medium mb-2">
                     EXAMINER'S NOTES
                   </p>
-                  <p className="text-[#D8D2C4] text-sm leading-relaxed whitespace-pre-wrap">
-                    {result}
-                  </p>
+                  <MarkdownReport text={result} />
                 </div>
                 <button
                   onClick={reset}
@@ -360,7 +577,11 @@ export default function ResumeDashboard() {
           </div>
 
           {/* Right: latest signals */}
-          <div className="bg-[#121009]/70 border border-white/[0.06] rounded-2xl p-6">
+          <div
+            className={`bg-[#121009]/70 border border-white/[0.06] rounded-2xl p-6 ${
+              status === "done" ? "lg:col-span-2" : ""
+            }`}
+          >
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] tracking-[0.18em] text-[#D97B4F] font-medium">
                 LATEST SIGNALS
